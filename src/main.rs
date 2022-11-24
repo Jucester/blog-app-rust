@@ -1,3 +1,4 @@
+
 #[macro_use]
 extern crate diesel;
 
@@ -29,11 +30,23 @@ fn insert(conn: &mut PgConnection, new_post: NewPost) -> Post {
 fn main() {
     let conn = &mut connect_db();
 
-    let new_post = NewPost {
-        title: "other post",
-        slug: "other_post",
-        body: "Yes to say",
-    };
+    let mut post_title = String::new();
+    let mut post_body = String::new();
+
+    println!("Inser your new post data: ");
+    println!("Title: ");
+    std::io::stdin().read_line(&mut post_title).unwrap();
+
+    println!("Body: ");
+    std::io::stdin().read_line(&mut post_body).unwrap();
+
+    let splitted: Vec<&str> = post_title.split(" ").collect();
+    let post_slug = splitted.join("_");
+
+
+
+    let new_post = NewPost { title: post_title.trim(), slug: post_slug.trim(), body: post_body.trim() };
+
 
     insert(conn, new_post);
 
