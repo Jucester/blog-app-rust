@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<title> First Page </title>
+	</head>
+	<body>
+		<h1> Hola Rust </h1>
+		{% for post in posts %}
+		<div>
+
+			<h1><a href="/posts/{{post.slug}}">	{{post.title}} </a></h1>
+			<h4>	{{post.body}} </h4>
+		{% endfor %}
+		</div>
+		
+	</body>
+</html>

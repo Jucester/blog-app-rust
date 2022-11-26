@@ -15,6 +15,7 @@ use diesel::r2d2::{self, ConnectionManager};
 use diesel::r2d2::Pool;
 use diesel::prelude::*;
 
+use tera::Tera;
 
 use self::schema::posts;
 use self::schema::posts::dsl::*;
@@ -33,19 +34,44 @@ fn insert(conn: &mut PgConnection, new_post: NewPost) -> Post {
     diesel::insert_into(posts::table).values(new_post).get_result::<Post>(conn).expect("Insert failed")
 }
 
-#[get("/")]
-async fn index() -> impl Responder {
-    HttpResponse::Ok().body("Hello World")
+
+#[get("/posts")]
+async fn get_posts(pool: web::Data<DbPool>, template_manager: web::Data<tera::Tera>) -> impl Responder {
+    let mut conn = pool.get().expect("Error connecting db.");
+        
+    match web::block(move || {posts.load::<Post>(&mut conn)}).await {
+        Ok(data) => {
+            let mut ctx = tera::Context::new();
+            let data = data.unwrap();
+            ctx.insert("posts", &data);
+            // HttpResponse::Ok().body(format!("{:?}", data))
+            HttpResponse::Ok().content_type("text/html").body(template_manager.render("index.html", &ctx).unwrap())
+        },
+        Err(err) => HttpResponse::Ok().body("Fail")
+    }
 }
 
 
-#[get("/posts")]
-async fn get_posts(pool: web::Data<DbPool>) -> impl Responder {
+#[get("/posts/{post_slug}")]
+async fn get_post(pool: web::Data<DbPool>, 
+                  template_manager: web::Data<tera::Tera>,
+                  post_slug: web::Path<String>) -> impl Responder {
     let mut conn = pool.get().expect("Error connecting db.");
-
-    match web::block(move || {posts.load::<Post>(&mut conn)}).await {
+       
+    let post_slug = post_slug.into_inner();
+    match web::block(move || {posts.filter(slug.eq(post_slug)).load::<Post>(&mut conn)}).await {
         Ok(data) => {
-            HttpResponse::Ok().body(format!("{:?}", data))
+            let mut ctx = tera::Context::new();
+            let data = data.unwrap();
+            if data.len() == 0 {
+                return HttpResponse::NotFound().finish();
+            }
+
+            let data = &data[0];
+
+            ctx.insert("post", &data);
+            // HttpResponse::Ok().body(format!("{:?}", data))
+            HttpResponse::Ok().content_type("text/html").body(template_manager.render("post.html", &ctx).unwrap())
         },
         Err(err) => HttpResponse::Ok().body("Fail")
     }
@@ -66,18 +92,20 @@ async fn create_post(pool: web::Data<DbPool>, item: web::Json<NewPostHandler>) -
 
 }
 
-
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
 
     let conn = connect_db();
+
+    let tera = Tera::new(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/**/*")).unwrap();
+
     HttpServer::new(move || {
         App::new()
             .service(get_posts)
             .service(create_post)
             .app_data(web::Data::new(conn.clone()))
+            .app_data(web::Data::new(tera.clone()))
     }).bind(("0.0.0.0", 9900)).unwrap().run().await
 
     // insert(conn, new_post);
